@@ -83,3 +83,70 @@ echo " continuing...."
 ```
 - Далее выполняем команду ```dracut -f -v```
 - Перезагружаемся и видим пингвина
+
+4(*). Сконфигурировать систему без отдельного раздела с /boot, а только с LVM:
+- ```parted, далее select /dev/sdb, mklabel msdos, mkpart 1 -1```
+- ```pvcreate /dev/sdb1/ --bootloaderareasize 1M```
+- ```vgcreate newOtus /dev/sdb1```
+- ```lvcreate -n root -l 100%FREE newOtus```
+Получаем:
+```/dev/mapper/newRoot-root```
+```
+[root@lvm ~]# pvs
+  PV         VG      Fmt  Attr PSize   PFree
+  /dev/sda1  newRoot lvm2 a--  <10.00g    0
+[root@lvm ~]# vgs
+  VG      #PV #LV #SN Attr   VSize   VFree
+  newRoot   1   1   0 wz--n- <10.00g    0
+[root@lvm ~]# lvs
+  LV   VG      Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  root newRoot -wi-ao---- <10.00g
+```
+- ```mkfs.ext4 /dev/mapper/newRoot-root```
+- ```cd /mnt/root```
+- ```mount /dev/mapper/newRoot-root /mnt/root```
+- ```rsync -avx / /mnt/root; rsync -avx /boot /mnt/root```
+- ```mount --rbind /dev/ /mnt/root/dev; mount --rbind /proc /mnt/root/proc; mount --rbind /sys /mnt/root/sys; mount --rbind /run /mnt/root/run```
+- ```chroot /mnt/root```
+- ```yum-config-manager --add-repo=https://yum.rumyantsev.com/centos/7/x86_64/```
+- ```yum install grub2 -y --nogpgcheck```
+- ```cat /etc/fstab```, меняем на наш новый lvm```/dev/mapper/newRoot-root /``` и комментируем /boot
+- ```nano /etc/default/grub``` и меняем в ```GRUB_CMDLINE_LINUX``` значение rd.lvm.lv на ```rd.lvm.lv=newRoot/root```
+- ```grub2-mkconfig -o /boot/grub2/grub.cfg```
+- ```dracut -f -v /boot/initramfs-3.10.0-862.2.3.el7.x86_64.img```
+- ```grub2-install /dev/sdb```
+- ```nano /etc/selinux/config``` и выключить значением ```Disabled``` SELINUX
+- выходим и загружаемся с нового диска
+```
+[root@lvm ~]# lsblk
+NAME             MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+sda                8:0    0  10G  0 disk
+└─sda1             8:1    0  10G  0 part
+  └─newRoot-root 253:0    0  10G  0 lvm  /
+```
+
+GRUB:
+```
+### BEGIN /etc/grub.d/10_linux ###
+menuentry 'CentOS Linux (3.10.0-862.2.3.el7.x86_64) 7 (Core)' --class centos --class gnu-linux --class gnu --class os --unrestricted $menuentry_id_option 'gnulinux-3.10
+.0-862.2.3.el7.x86_64-advanced-c14b0452-22d6-459f-aff0-c26dfd925547' {
+        load_video
+        set gfxpayload=keep
+        insmod gzio
+        insmod part_msdos
+        insmod lvm
+        insmod ext2
+        set root='lvmid/ubAbwR-P8ye-gBeG-KNMG-sdiA-JxqV-kwgcwk/89GBxh-NSIc-dAFo-LXg4-W1jJ-p0bF-rLdNxY'
+        if [ x$feature_platform_search_hint = xy ]; then
+          search --no-floppy --fs-uuid --set=root --hint='lvmid/ubAbwR-P8ye-gBeG-KNMG-sdiA-JxqV-kwgcwk/89GBxh-NSIc-dAFo-LXg4-W1jJ-p0bF-rLdNxY'  c14b0452-22d6-459f-aff0-c26dfd925547
+        else
+          search --no-floppy --fs-uuid --set=root c14b0452-22d6-459f-aff0-c26dfd925547
+        fi
+        linux16 /boot/vmlinuz-3.10.0-862.2.3.el7.x86_64 root=/dev/mapper/newRoot-root ro no_timer_check console=tty0 console=ttyS0,115200n8 net.ifnames=0 biosdevname=0 elevator=noop crashkernel=auto rd.lvm.lv=newRoot/root rhgb quiet
+        initrd16 /boot/initramfs-3.10.0-862.2.3.el7.x86_64.img
+}
+if [ "x$default" = 'CentOS Linux (3.10.0-862.2.3.el7.x86_64) 7 (Core)' ]; then default='Advanced options for CentOS Linux>CentOS Linux (3.10.0-862.2.3.el7.x86_64) 7 (Core)'; fi;
+### END /etc/grub.d/10_linux ###
+```
+```set root='lvmid/ubAbwR-P8ye-gBeG-KNMG-sdiA-JxqV-kwgcwk/89GBxh-NSIc-dAFo-LXg4-W1jJ-p0bF-rLdNxY'``` - UID VG и LV.
+
