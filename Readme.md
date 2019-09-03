@@ -103,7 +103,7 @@ echo " continuing...."
   root newRoot -wi-ao---- <10.00g
 ```
 - ```mkfs.ext4 /dev/mapper/newRoot-root```
-- ```cd /mnt/root```
+- ```mkdir /mnt/root```
 - ```mount /dev/mapper/newRoot-root /mnt/root```
 - ```rsync -avx / /mnt/root; rsync -avx /boot /mnt/root```
 - ```mount --rbind /dev/ /mnt/root/dev; mount --rbind /proc /mnt/root/proc; mount --rbind /sys /mnt/root/sys; mount --rbind /run /mnt/root/run```
